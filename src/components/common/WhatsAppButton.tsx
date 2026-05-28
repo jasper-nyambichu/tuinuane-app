@@ -1,7 +1,7 @@
 const WhatsAppButton = () => {
   return (
     <a
-      href="https://wa.me/254700000000?text=Hello%20Tuinuane%20Digitals%2C%20I%27d%20like%20to%20inquire%20about%20your%20services"
+      href="https://wa.me/254725723131?text=Hello%20Tuinuane%20Digitals%2C%20I%27d%20like%20to%20inquire%20about%20your%20services"
       target="_blank"
       rel="noopener noreferrer"
       className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 rounded-full bg-[hsl(142_70%_42%)] text-white shadow-premium hover:scale-110 transition-transform duration-200 pulse-glow"
