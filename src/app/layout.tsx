@@ -1,4 +1,4 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import Providers from '../components/layout/Providers'
 import Navbar from '../components/layout/Navbar'
@@ -6,8 +6,14 @@ import Footer from '../components/layout/Footer'
 import WhatsAppButton from '../components/common/WhatsAppButton'
 
 export const metadata: Metadata = {
-  title: 'Tuinuane Digitals — Digital Solutions for Kenya',
-  description: 'E-commerce, School Management & Healthcare Systems built for Kenya',
+  title: 'Tuinuane Digitals — Digital Excellence for African Enterprises',
+  description: 'Bespoke E-commerce, School Management & Healthcare Ecosystems engineered for growth.',
+}
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
 }
 
 export default function RootLayout({
@@ -16,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="scroll-smooth" data-scroll-behavior="smooth">
       <head>
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -25,7 +31,7 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body>
+      <body className="antialiased selection:bg-primary/10 selection:text-primary">
         <Providers>
           <Navbar />
           <main className="min-h-screen relative">
@@ -36,5 +42,5 @@ export default function RootLayout({
         </Providers>
       </body>
     </html>
-  )
+   )
 }

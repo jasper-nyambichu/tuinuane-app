@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Menu, X } from 'lucide-react'
+import { Menu, X, ArrowRight } from 'lucide-react'
 import { Button } from '../ui/button'
 import { ROUTES } from '../../constants/routes'
 import logo from '../../assets/logo.png'
@@ -28,53 +28,53 @@ const Navbar = () => {
     return () => window.removeEventListener('scroll', onScroll)
   }, [])
 
-  // Close mobile menu on route change
   useEffect(() => {
     setIsOpen(false)
   }, [pathname])
 
   return (
     <header
-      className={`fixed top-0 left-0 right-0 z-40 transition-all duration-300 ${
+      className={`fixed top-0 left-0 right-0 z-50 transition-all duration-500 ${
         scrolled
-          ? 'bg-white/90 backdrop-blur-md shadow-sm border-b border-border'
-          : 'bg-white'
+          ? 'py-4'
+          : 'py-8'
       }`}
     >
       <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16 md:h-20">
-
+        <div 
+          className={`flex items-center justify-between px-6 h-16 md:h-20 rounded-full transition-all duration-500 ${
+            scrolled 
+              ? 'glass-premium border border-white/20 shadow-xl' 
+              : 'bg-transparent'
+          }`}
+        >
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 shrink-0">
-            <Image
-              src={logo}
-              alt="Tuinuane Digitals"
-              className="h-9 w-9 object-contain"
-              width={36}
-              height={36}
-            />
-            <span className="font-display font-extrabold text-xl text-foreground">
-              Tuinuane<span className="gradient-text">Digitals</span>
+          <Link href="/" className="flex items-center gap-3 shrink-0 group">
+            <div className="relative w-10 h-10 overflow-hidden rounded-xl">
+              <Image
+                src={logo}
+                alt="Tuinuane Digitals"
+                className="object-contain group-hover:scale-110 transition-transform duration-500"
+                fill
+              />
+            </div>
+            <span className="font-black text-xl tracking-tighter text-foreground">
+              Tuinuane<span className="text-primary">Digitals</span>
             </span>
           </Link>
 
           {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center gap-8">
+          <nav className="hidden md:flex items-center gap-10">
             {navLinks.map((link) => (
               <Link
                 key={link.label}
                 href={link.href}
-                className={`text-sm font-medium transition-colors duration-200 relative
-                  after:absolute after:bottom-0 after:left-0 after:w-full after:h-0.5
-                  after:bg-primary after:scale-x-0 after:origin-right
-                  after:transition-transform after:duration-300
-                  hover:after:scale-x-100 hover:after:origin-left
-                  ${pathname === link.href
-                    ? 'text-foreground after:scale-x-100'
-                    : 'text-muted-foreground hover:text-foreground'
-                  }`}
+                className={`text-[13px] font-bold uppercase tracking-widest transition-all duration-300 relative group
+                  ${pathname === link.href ? 'text-primary' : 'text-muted-foreground hover:text-foreground'}
+                `}
               >
                 {link.label}
+                <span className={`absolute -bottom-1 left-0 h-[2px] bg-primary transition-all duration-300 ${pathname === link.href ? 'w-full' : 'w-0 group-hover:w-full'}`} />
               </Link>
             ))}
           </nav>
@@ -83,40 +83,45 @@ const Navbar = () => {
           <div className="hidden md:block">
             <Button
               asChild
-              size="sm"
-              className="rounded-none px-6 h-10 bg-primary text-primary-foreground hover:bg-primary/90 font-semibold"
+              size="lg"
+              className="rounded-full px-8 h-12 bg-primary text-black hover:bg-primary/90 font-bold tracking-tight shadow-lg shadow-primary/10 transition-all active:scale-95"
             >
-              <Link href={ROUTES.CONTACT}>Contact</Link>
+              <Link href={ROUTES.CONTACT} className="flex items-center gap-2">
+                Let's Talk
+                <ArrowRight className="w-4 h-4" />
+              </Link>
             </Button>
           </div>
 
           {/* Mobile Menu Button */}
           <button
-            className="md:hidden p-2 text-foreground active:scale-95 transition-transform"
+            className="md:hidden w-10 h-10 flex items-center justify-center rounded-full glass-premium text-foreground active:scale-90 transition-all"
             onClick={() => setIsOpen(!isOpen)}
             aria-label="Toggle menu"
           >
-            {isOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+            {isOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
           </button>
         </div>
       </div>
 
       {/* Mobile Menu */}
       {isOpen && (
-        <div className="md:hidden bg-background border-t border-border animate-fade-in">
-          <nav className="container mx-auto px-4 py-6 flex flex-col gap-4">
+        <div className="md:hidden absolute top-full left-4 right-4 mt-4 glass-premium rounded-[2rem] border border-white/20 shadow-2xl p-8 animate-fade-in overflow-hidden">
+          <nav className="flex flex-col gap-6">
             {navLinks.map((link) => (
               <Link
                 key={link.label}
                 href={link.href}
-                className="text-base font-medium text-foreground py-2"
+                className="text-2xl font-black tracking-tighter text-foreground hover:text-primary transition-colors"
               >
                 {link.label}
               </Link>
             ))}
-            <Button asChild className="rounded-full mt-2 active:scale-95 transition-transform">
-              <Link href={ROUTES.GET_QUOTE}>Get a Quote</Link>
-            </Button>
+            <div className="pt-6 border-t border-border/50">
+              <Button asChild className="w-full rounded-full h-14 text-lg font-bold">
+                <Link href={ROUTES.GET_QUOTE}>Get a Quote</Link>
+              </Button>
+            </div>
           </nav>
         </div>
       )}
