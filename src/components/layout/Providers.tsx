@@ -13,7 +13,16 @@ export default function Providers({ children }: { children: React.ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Sonner />
+        <Sonner
+          position="top-right"
+          toastOptions={{
+            style: {
+              background: 'hsl(var(--background))',
+              border: '1px solid hsl(var(--border))',
+              color: 'hsl(var(--foreground))',
+            },
+          }}
+        />
         {children}
       </TooltipProvider>
     </QueryClientProvider>

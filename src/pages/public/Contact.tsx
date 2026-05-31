@@ -1,43 +1,52 @@
-'use client';
-import { useState } from "react";
-import PageWrapper from "@/components/layout/PageWrapper";
-import SectionHeading from "@/components/common/SectionHeading";
-import ScrollReveal from "@/components/common/ScrollReveal";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { MapPin, Phone, Mail, Send } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+'use client'
+
+import { useState } from 'react'
+import PageWrapper from '../../components/layout/PageWrapper'
+import SectionHeading from '../../components/common/SectionHeading'
+import ScrollReveal from '../../components/common/ScrollReveal'
+import { Button } from '../../components/ui/button'
+import { Input } from '../../components/ui/input'
+import { Textarea } from '../../components/ui/textarea'
+import { MapPin, Phone, Mail, Send } from 'lucide-react'
+import { toast } from 'sonner'
 
 const Contact = () => {
-  const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-  e.preventDefault()
-  setLoading(true)
-  const form = e.target as HTMLFormElement
-  const body = {
-    name: (form.elements.namedItem('name') as HTMLInputElement).value,
-    phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
-    email: (form.elements.namedItem('email') as HTMLInputElement).value,
-    message: (form.elements.namedItem('message') as HTMLTextAreaElement).value,
-  }
+    e.preventDefault()
+    setLoading(true)
+    const form = e.target as HTMLFormElement
+    const body = {
+      name: (form.elements.namedItem('name') as HTMLInputElement).value,
+      phone: (form.elements.namedItem('phone') as HTMLInputElement).value,
+      email: (form.elements.namedItem('email') as HTMLInputElement).value,
+      message: (form.elements.namedItem('message') as HTMLTextAreaElement).value,
+    }
 
-  const res = await fetch('/api/leads', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+    try {
+      const res = await fetch('/api/leads', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
 
-  setLoading(false)
-  if (res.ok) {
-    toast({ title: 'Message sent!', description: "We'll get back to you within 24 hours." })
-    form.reset()
-  } else {
-    toast({ title: 'Error', description: 'Something went wrong. Please try again.', variant: 'destructive' })
+      if (res.ok) {
+        toast.success('Message sent!', {
+          description: "We'll get back to you within 24 hours.",
+        })
+        form.reset()
+      } else {
+        throw new Error('Failed')
+      }
+    } catch {
+      toast.error('Something went wrong', {
+        description: 'Please try again or call us directly.',
+      })
+    } finally {
+      setLoading(false)
+    }
   }
-}
 
   return (
     <PageWrapper>
@@ -74,7 +83,7 @@ const Contact = () => {
                   <Textarea name="message" placeholder="Tell us about your project…" rows={5} required />
                 </div>
                 <Button type="submit" className="w-full rounded-full active:scale-[0.97]" disabled={loading}>
-                  {loading ? "Sending…" : "Send Message"}
+                  {loading ? 'Sending…' : 'Send Message'}
                   <Send className="ml-2 w-4 h-4" />
                 </Button>
               </form>
@@ -98,8 +107,8 @@ const Contact = () => {
                   </div>
                   <div>
                     <h4 className="font-display font-bold text-sm mb-1">Call Us</h4>
-                    <a href="tel:+254700000000" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                      +254 700 000 000
+                    <a href="tel:+254725723131" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                      +254 725 723 131
                     </a>
                   </div>
                 </div>
@@ -109,8 +118,8 @@ const Contact = () => {
                   </div>
                   <div>
                     <h4 className="font-display font-bold text-sm mb-1">Email Us</h4>
-                    <a href="mailto:hello@tuinuanedigitals.co.ke" className="text-sm text-muted-foreground hover:text-primary transition-colors">
-                      hello@tuinuanedigitals.co.ke
+                    <a href="mailto:codesjasper@gmail.com" className="text-sm text-muted-foreground hover:text-primary transition-colors">
+                      codesjasper@gmail.com
                     </a>
                   </div>
                 </div>
@@ -120,7 +129,7 @@ const Contact = () => {
         </div>
       </section>
     </PageWrapper>
-  );
-};
+  )
+}
 
-export default Contact;
+export default Contact

@@ -14,7 +14,7 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-12">
           <div>
             <Link href="/" className="flex items-center gap-2 mb-4">
-              <Image src={logo} alt="Tuinuane Digitals" width={32} height={32} className="h-8 w-8 object-contain" />
+              <Image src={logo} alt="Tuinuane Digitals" className="h-9 w-9 object-contain" width={36} height={36} sizes="36px" />
               <span className="font-display font-extrabold text-lg text-foreground">
                 Tuinuane<span className="gradient-text">Digitals</span>
               </span>

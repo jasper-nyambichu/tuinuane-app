@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { Button } from '../ui/button'
+import { toast } from 'sonner'
+import { CheckCircle, Trash2, X, Send } from 'lucide-react'
 
 type Quote = {
   id: string
@@ -42,29 +44,64 @@ export default function QuotesTable({ quotes }: { quotes: Quote[] }) {
   const handleUpdate = async () => {
     if (!selected) return
     setLoading(true)
-    const res = await fetch(`/api/quotes/${selected.id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status, proposalText, notes }),
-    })
-    const { data } = await res.json()
-    setLocalQuotes(prev => prev.map(q => q.id === data.id ? data : q))
-    setSelected(null)
-    setLoading(false)
+    try {
+      const res = await fetch(`/api/quotes/${selected.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, proposalText, notes }),
+      })
+      const { data, error } = await res.json()
+      if (error) throw new Error(error)
+      setLocalQuotes(prev => prev.map(q => q.id === data.id ? data : q))
+      setSelected(null)
+      toast.success('Proposal updated', {
+        description: status === 'proposal_sent'
+          ? `Proposal sent to ${selected.business_name}`
+          : `Status updated to ${status}`,
+        icon: <Send className="h-4 w-4" />,
+      })
+    } catch {
+      toast.error('Failed to update proposal', {
+        description: 'Please try again',
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Delete this quote request?')) return
-    await fetch(`/api/quotes/${id}`, { method: 'DELETE' })
-    setLocalQuotes(prev => prev.filter(q => q.id !== id))
-    setSelected(null)
+    const quote = localQuotes.find(q => q.id === id)
+    toast('Delete this quote request?', {
+      description: `This will permanently remove ${quote?.business_name}'s request.`,
+      action: {
+        label: 'Delete',
+        onClick: async () => {
+          try {
+            await fetch(`/api/quotes/${id}`, { method: 'DELETE' })
+            setLocalQuotes(prev => prev.filter(q => q.id !== id))
+            setSelected(null)
+            toast.success('Quote request deleted')
+          } catch {
+            toast.error('Failed to delete quote')
+          }
+        },
+      },
+      cancel: {
+        label: 'Cancel',
+        onClick: () => {},
+      },
+    })
   }
 
   return (
     <>
       <div className="bg-card border border-border rounded-2xl overflow-hidden">
         {localQuotes.length === 0 ? (
-          <p className="text-sm text-muted-foreground p-8 text-center">No quote requests yet</p>
+          <div className="p-12 text-center">
+            <div className="w-12 h-12 rounded-2xl bg-muted flex items-center justify-center mx-auto mb-3 text-xl">📄</div>
+            <p className="text-sm font-medium mb-1">No quote requests yet</p>
+            <p className="text-xs text-muted-foreground">Quote requests from your site will appear here</p>
+          </div>
         ) : (
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-muted/40">
@@ -79,7 +116,7 @@ export default function QuotesTable({ quotes }: { quotes: Quote[] }) {
             </thead>
             <tbody>
               {localQuotes.map((quote) => (
-                <tr key={quote.id} className="border-b border-border last:border-0 hover:bg-muted/20">
+                <tr key={quote.id} className="border-b border-border last:border-0 hover:bg-muted/20 transition-colors">
                   <td className="px-4 py-3 font-medium">{quote.business_name}</td>
                   <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{quote.name}</td>
                   <td className="px-4 py-3 text-muted-foreground hidden lg:table-cell">{quote.product_interest}</td>
@@ -103,64 +140,77 @@ export default function QuotesTable({ quotes }: { quotes: Quote[] }) {
         )}
       </div>
 
-      {/* Quote Detail Modal */}
       {selected && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
-          <div className="bg-background rounded-2xl border border-border w-full max-w-lg p-6 shadow-premium max-h-[90vh] overflow-y-auto">
-            <h2 className="font-display font-bold text-lg mb-1">{selected.business_name}</h2>
-            <p className="text-sm text-muted-foreground mb-1">{selected.name} · {selected.email}</p>
-            <p className="text-xs text-primary font-medium mb-6">{selected.product_interest}</p>
-
-            <div className="bg-muted/40 rounded-xl p-4 mb-5">
-              <p className="text-xs font-medium text-muted-foreground mb-1">Project Description</p>
-              <p className="text-sm">{selected.description}</p>
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+          <div className="bg-background rounded-2xl border border-border w-full max-w-lg shadow-premium max-h-[90vh] overflow-y-auto animate-fade-in-up">
+            <div className="flex items-center justify-between p-6 border-b border-border">
+              <div>
+                <h2 className="font-display font-bold text-lg">{selected.business_name}</h2>
+                <p className="text-sm text-muted-foreground">{selected.name} · {selected.email}</p>
+                <span className="text-xs text-primary font-medium">{selected.product_interest}</span>
+              </div>
+              <button onClick={() => setSelected(null)} className="p-2 rounded-xl hover:bg-muted transition-colors">
+                <X className="h-4 w-4" />
+              </button>
             </div>
 
-            <div className="space-y-4 mb-6">
+            <div className="p-6 space-y-5">
+              <div className="bg-muted/40 rounded-xl p-4">
+                <p className="text-xs font-medium text-muted-foreground mb-2">Project Description</p>
+                <p className="text-sm leading-relaxed">{selected.description}</p>
+              </div>
+
               <div>
                 <label className="text-xs font-medium block mb-1.5">Status</label>
                 <select
                   value={status}
                   onChange={e => setStatus(e.target.value)}
-                  className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background"
+                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background focus:outline-none focus:border-primary/50"
                 >
-                  <option value="pending">Pending</option>
-                  <option value="proposal_sent">Proposal Sent</option>
-                  <option value="approved">Approved</option>
-                  <option value="rejected">Rejected</option>
+                  <option value="pending">🟡 Pending</option>
+                  <option value="proposal_sent">🔵 Proposal Sent</option>
+                  <option value="approved">🟢 Approved</option>
+                  <option value="rejected">🔴 Rejected</option>
                 </select>
               </div>
+
               <div>
                 <label className="text-xs font-medium block mb-1.5">Proposal Text</label>
                 <textarea
                   value={proposalText}
                   onChange={e => setProposalText(e.target.value)}
-                  rows={4}
-                  className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background resize-none"
-                  placeholder="Write your proposal here..."
+                  rows={5}
+                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background resize-none focus:outline-none focus:border-primary/50"
+                  placeholder={`Dear ${selected.name},\n\nBased on your requirements for ${selected.business_name}...`}
                 />
               </div>
+
               <div>
-                <label className="text-xs font-medium block mb-1.5">Notes</label>
+                <label className="text-xs font-medium block mb-1.5">Internal Notes</label>
                 <textarea
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
                   rows={2}
-                  className="w-full border border-border rounded-xl px-3 py-2 text-sm bg-background resize-none"
-                  placeholder="Internal notes..."
+                  className="w-full border border-border rounded-xl px-3 py-2.5 text-sm bg-background resize-none focus:outline-none focus:border-primary/50"
+                  placeholder="Internal notes visible only to admins..."
                 />
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
-              <Button onClick={handleUpdate} disabled={loading} className="flex-1 rounded-xl">
+            <div className="flex items-center gap-3 p-6 border-t border-border">
+              <Button onClick={handleUpdate} disabled={loading} className="flex-1 rounded-xl gap-2">
+                <CheckCircle className="h-4 w-4" />
                 {loading ? 'Saving...' : 'Save Changes'}
               </Button>
               <Button variant="outline" onClick={() => setSelected(null)} className="rounded-xl">
                 Cancel
               </Button>
-              <Button variant="outline" onClick={() => handleDelete(selected.id)}
-                className="rounded-xl text-destructive hover:bg-destructive/10 border-destructive/30">
+              <Button
+                variant="outline"
+                onClick={() => handleDelete(selected.id)}
+                className="rounded-xl text-destructive hover:bg-destructive/10 border-destructive/30 gap-2"
+              >
+                <Trash2 className="h-4 w-4" />
                 Delete
               </Button>
             </div>
