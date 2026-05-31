@@ -7,9 +7,67 @@ import ScrollReveal from '../../components/common/ScrollReveal'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Textarea } from '../../components/ui/textarea'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select'
-import { Sparkles, ArrowRight } from 'lucide-react'
+import { Sparkles, ArrowRight, ShoppingCart, GraduationCap, Stethoscope, Globe, Wrench, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { cn } from '../../lib/utils'
+
+const PRODUCTS = [
+  {
+    value: 'ShopHub — E-commerce Website',
+    label: 'ShopHub',
+    tagline: 'E-commerce Website',
+    description: 'Sell online with payments, inventory & delivery tracking.',
+    icon: ShoppingCart,
+    color: 'text-orange-500',
+    bg: 'bg-orange-50 dark:bg-orange-950/30',
+    border: 'border-orange-200 dark:border-orange-800',
+    activeBorder: 'border-orange-500',
+  },
+  {
+    value: 'EduManage — School Management',
+    label: 'EduManage',
+    tagline: 'School Management',
+    description: 'Students, fees, exams & staff — all in one platform.',
+    icon: GraduationCap,
+    color: 'text-blue-500',
+    bg: 'bg-blue-50 dark:bg-blue-950/30',
+    border: 'border-blue-200 dark:border-blue-800',
+    activeBorder: 'border-blue-500',
+  },
+  {
+    value: 'ClinicCare — Medical Booking',
+    label: 'ClinicCare',
+    tagline: 'Medical Booking',
+    description: 'Appointments, patient records & billing for clinics.',
+    icon: Stethoscope,
+    color: 'text-green-500',
+    bg: 'bg-green-50 dark:bg-green-950/30',
+    border: 'border-green-200 dark:border-green-800',
+    activeBorder: 'border-green-500',
+  },
+  {
+    value: 'BizSite — Business Website',
+    label: 'BizSite',
+    tagline: 'Business Website',
+    description: 'Professional website to showcase your brand & get leads.',
+    icon: Globe,
+    color: 'text-purple-500',
+    bg: 'bg-purple-50 dark:bg-purple-950/30',
+    border: 'border-purple-200 dark:border-purple-800',
+    activeBorder: 'border-purple-500',
+  },
+  {
+    value: 'Custom Solution',
+    label: 'Custom Solution',
+    tagline: 'Built for You',
+    description: 'Have a unique idea? We build exactly what you need.',
+    icon: Wrench,
+    color: 'text-rose-500',
+    bg: 'bg-rose-50 dark:bg-rose-950/30',
+    border: 'border-rose-200 dark:border-rose-800',
+    activeBorder: 'border-rose-500',
+  },
+]
 
 const GetQuote = () => {
   const [productInterest, setProductInterest] = useState('')
@@ -17,6 +75,12 @@ const GetQuote = () => {
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+
+    if (!productInterest) {
+      toast.error('Please select a product', { description: 'Choose the solution that best fits your business.' })
+      return
+    }
+
     setLoading(true)
     const form = e.target as HTMLFormElement
     const body = {
@@ -35,18 +99,22 @@ const GetQuote = () => {
         body: JSON.stringify(body),
       })
 
-      if (res.ok) {
-        toast.success('Proposal request received!', {
-          description: 'Check your email — we will be in touch within 24 hours.',
-        })
-        form.reset()
-        setProductInterest('')
-      } else {
-        throw new Error('Failed')
+      // ✅ FIX 3: Read the actual error message from the response
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Server error ${res.status}`)
       }
-    } catch {
+
+      toast.success('Proposal request received!', {
+        description: 'Check your email — we will be in touch within 24 hours.',
+      })
+      form.reset()
+      setProductInterest('')
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown error'
+      console.error('[GetQuote] submit error:', message)
       toast.error('Submission failed', {
-        description: 'Please try again or contact us directly.',
+        description: message || 'Please try again or contact us directly.',
       })
     } finally {
       setLoading(false)
@@ -66,7 +134,9 @@ const GetQuote = () => {
           </ScrollReveal>
 
           <ScrollReveal delay={0.1}>
-            <form onSubmit={handleSubmit} className="space-y-5 rounded-2xl border border-border bg-background p-8">
+            <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border border-border bg-background p-8">
+              
+              {/* Name + Phone */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                 <div>
                   <label className="text-sm font-medium mb-1.5 block">Your Name</label>
@@ -78,32 +148,60 @@ const GetQuote = () => {
                 </div>
               </div>
 
+              {/* Email */}
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Email Address</label>
                 <Input name="email" placeholder="you@email.com" type="email" required />
               </div>
 
+              {/* Business Name */}
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Business Name</label>
                 <Input name="businessName" placeholder="e.g. Sunrise Academy" required />
               </div>
 
+              {/* ✅ Improved Product Selector — Visual Cards */}
               <div>
-                <label className="text-sm font-medium mb-1.5 block">Product Interest</label>
-                <Select required value={productInterest} onValueChange={setProductInterest}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a product" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ShopHub — E-commerce Website">ShopHub — E-commerce Website</SelectItem>
-                    <SelectItem value="EduManage — School Management">EduManage — School Management</SelectItem>
-                    <SelectItem value="ClinicCare — Medical Booking">ClinicCare — Medical Booking</SelectItem>
-                    <SelectItem value="BizSite — Business Website">BizSite — Business Website</SelectItem>
-                    <SelectItem value="Custom Solution">Custom Solution</SelectItem>
-                  </SelectContent>
-                </Select>
+                <label className="text-sm font-medium mb-3 block">
+                  What are you looking for?
+                  <span className="ml-1 text-muted-foreground font-normal">(choose one)</span>
+                </label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {PRODUCTS.map((product) => {
+                    const Icon = product.icon
+                    const isSelected = productInterest === product.value
+                    return (
+                      <button
+                        key={product.value}
+                        type="button"
+                        onClick={() => setProductInterest(product.value)}
+                        className={cn(
+                          'relative text-left rounded-xl border-2 p-4 transition-all duration-200',
+                          'hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          isSelected
+                            ? `${product.bg} ${product.activeBorder} shadow-sm`
+                            : `bg-background ${product.border} hover:${product.bg}`
+                        )}
+                      >
+                        {isSelected && (
+                          <CheckCircle2 className={cn('absolute top-3 right-3 w-4 h-4', product.color)} />
+                        )}
+                        <div className={cn('w-8 h-8 rounded-lg flex items-center justify-center mb-2', product.bg)}>
+                          <Icon className={cn('w-4 h-4', product.color)} />
+                        </div>
+                        <p className="font-semibold text-sm leading-tight">{product.label}</p>
+                        <p className={cn('text-xs font-medium mb-1', product.color)}>{product.tagline}</p>
+                        <p className="text-xs text-muted-foreground leading-snug">{product.description}</p>
+                      </button>
+                    )
+                  })}
+                </div>
+                {!productInterest && (
+                  <p className="text-xs text-muted-foreground mt-2 ml-0.5">Select a product above to continue.</p>
+                )}
               </div>
 
+              {/* Description */}
               <div>
                 <label className="text-sm font-medium mb-1.5 block">Describe Your Project</label>
                 <Textarea
@@ -114,7 +212,12 @@ const GetQuote = () => {
                 />
               </div>
 
-              <Button type="submit" size="lg" className="w-full rounded-full active:scale-[0.97]" disabled={loading}>
+              <Button
+                type="submit"
+                size="lg"
+                className="w-full rounded-full active:scale-[0.97]"
+                disabled={loading || !productInterest}
+              >
                 {loading ? (
                   <>
                     <Sparkles className="mr-2 w-4 h-4 animate-pulse" />
