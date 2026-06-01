@@ -4,11 +4,8 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
 import { KALI_KNOWLEDGE } from '../constants/chatKnowledge'
 
-if (!process.env.GEMINI_API_KEY) {
-  throw new Error('[gemini.ts] GEMINI_API_KEY is missing from .env.local')
-}
-
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+// Key is validated at runtime inside getGeminiModel — not at module load time.
+// Throwing at module level causes Vercel build to fail during page data collection.
 
 export const KALI_SYSTEM_PROMPT = `
 You are Kali, the AI assistant for Tuinuane Digitals — a Kenyan software agency that builds 
@@ -106,6 +103,10 @@ RESPONSE FORMAT:
 `
 
 export function getGeminiModel() {
+  if (!process.env.GEMINI_API_KEY) {
+    throw new Error('[gemini.ts] GEMINI_API_KEY is missing — add it to Vercel environment variables')
+  }
+  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
   return genAI.getGenerativeModel({
     model: 'gemini-2.5-flash',
     systemInstruction: KALI_SYSTEM_PROMPT,
