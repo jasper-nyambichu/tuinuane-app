@@ -106,7 +106,7 @@ const Contact = () => {
                     <Phone className="w-5 h-5 text-primary" />
                   </div>
                   <div>
-                    <h4 className="font-display font-bold text-sm mb-1">Call Us</h4>
+                    <h4 className="font-display font-bold text-sm mb-1">Call Us On</h4>
                     <a href="tel:+254725723131" className="text-sm text-muted-foreground hover:text-primary transition-colors">
                       +254 725 723 131
                     </a>
