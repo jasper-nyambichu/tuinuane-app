@@ -2,7 +2,9 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { MessageCircle, X, Send, Loader2, Sparkles, ChevronDown } from 'lucide-react'
+import {
+  MessageCircle, X, Send, Loader2, Sparkles, ChevronDown,
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 type Message = {
@@ -14,7 +16,7 @@ type Message = {
 
 type ChatState = 'closed' | 'open' | 'minimised'
 
-// ✅ Welcome message is UI-only — it is NEVER sent to the API as history
+// Welcome message is UI-only — NEVER sent to the API as history
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
   role: 'assistant',
@@ -30,31 +32,34 @@ const QUICK_PROMPTS = [
 ]
 
 export default function ChatWidget() {
-  const [state, setState] = useState<ChatState>('closed')
+  const [state, setState]       = useState<ChatState>('closed')
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [unread, setUnread] = useState(0)
+  const [input, setInput]       = useState('')
+  const [loading, setLoading]   = useState(false)
+  const [unread, setUnread]     = useState(0)
   const [hasOpened, setHasOpened] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
-  const abortRef = useRef<AbortController | null>(null)
+  const inputRef  = useRef<HTMLInputElement>(null)
+  const abortRef  = useRef<AbortController | null>(null)
 
+  // Auto-scroll to latest message
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Focus input when opened
   useEffect(() => {
     if (state === 'open') {
-      setTimeout(() => inputRef.current?.focus(), 100)
+      setTimeout(() => inputRef.current?.focus(), 120)
       setUnread(0)
     }
   }, [state])
 
+  // Show unread badge after 45s if never opened
   useEffect(() => {
     if (hasOpened) return
-    const timer = setTimeout(() => setUnread(1), 45000)
-    return () => clearTimeout(timer)
+    const t = setTimeout(() => setUnread(1), 45_000)
+    return () => clearTimeout(t)
   }, [hasOpened])
 
   const open = () => {
@@ -68,46 +73,104 @@ export default function ChatWidget() {
     abortRef.current?.abort()
   }
 
+  const collapse = () => setState('minimised')
+
   const addMessage = useCallback((msg: Omit<Message, 'id' | 'timestamp'>) => {
     const full: Message = { ...msg, id: `${msg.role}-${Date.now()}`, timestamp: new Date() }
     setMessages(prev => [...prev, full])
     return full.id
   }, [])
 
-  const send = useCallback(async (text: string) => {
-    const trimmed = text.trim()
-    if (!trimmed || loading) return
+  // ── Rate-limit countdown state ───────────────────────────────────────────
+  const [retryCountdown, setRetryCountdown] = useState<number>(0)
+  const retryTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
+  const pendingRetryRef = useRef<{ text: string; apiHistory: { role: string; content: string }[] } | null>(null)
 
-    setInput('')
+  const startCountdown = useCallback((seconds: number, text: string, apiHistory: { role: string; content: string }[]) => {
+    pendingRetryRef.current = { text, apiHistory }
+    setRetryCountdown(seconds)
+    retryTimerRef.current = setInterval(() => {
+      setRetryCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(retryTimerRef.current!)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+  }, [])
+
+  // Auto-fire the retry when countdown reaches 0 and there's a pending message
+  useEffect(() => {
+    if (retryCountdown === 0 && pendingRetryRef.current) {
+      const { text, apiHistory } = pendingRetryRef.current
+      pendingRetryRef.current = null
+      fireRequest(text, apiHistory)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryCountdown])
+
+  // Core fetch — separated so it can be called both fresh and on retry
+  const fireRequest = useCallback(async (
+    trimmed: string,
+    apiHistory: { role: string; content: string }[],
+    isRetry = false
+  ) => {
+    const assistantId = isRetry
+      ? `assistant-retry-${Date.now()}`
+      : `assistant-${Date.now()}`
+
+    if (!isRetry) {
+      setMessages(prev => [
+        ...prev,
+        { id: assistantId, role: 'assistant' as const, content: '', timestamp: new Date() },
+      ])
+    } else {
+      // On retry, update the placeholder that was left with the countdown message
+      setMessages(prev =>
+        prev.map(m =>
+          m.role === 'assistant' && m.content.startsWith('⏳')
+            ? { ...m, id: assistantId, content: '' }
+            : m
+        )
+      )
+    }
+
     setLoading(true)
-    addMessage({ role: 'user', content: trimmed })
-
-    const assistantId = `assistant-${Date.now()}`
-    setMessages(prev => [...prev, { id: assistantId, role: 'assistant', content: '', timestamp: new Date() }])
-
-    // ✅ Build API history: exclude the static welcome message (id: 'welcome')
-    // Only send real conversation turns — always starts with a user message
-    const apiHistory = messages
-      .filter(m => m.id !== 'welcome' && m.content.trim())
-      .map(m => ({ role: m.role, content: m.content }))
-    apiHistory.push({ role: 'user', content: trimmed })
 
     try {
       abortRef.current = new AbortController()
 
       const res = await fetch('/api/chat', {
-        method: 'POST',
+        method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: apiHistory }),
-        signal: abortRef.current.signal,
+        body:    JSON.stringify({ messages: apiHistory }),
+        signal:  abortRef.current.signal,
       })
+
+      // ── Handle 429 rate limit ──────────────────────────────────────────
+      if (res.status === 429) {
+        const body = await res.json().catch(() => ({}))
+        const wait = (body.retryAfter as number) ?? 15
+
+        setMessages(prev =>
+          prev.map(m =>
+            m.id === assistantId
+              ? { ...m, content: `⏳ I'm handling a few chats right now. Auto-retrying in ${wait}s…` }
+              : m
+          )
+        )
+        setLoading(false)
+        startCountdown(wait, trimmed, apiHistory)
+        return
+      }
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
         throw new Error(err.error || `Error ${res.status}`)
       }
 
-      const reader = res.body!.getReader()
+      const reader  = res.body!.getReader()
       const decoder = new TextDecoder()
       let full = ''
 
@@ -115,9 +178,9 @@ export default function ChatWidget() {
         const { done, value } = await reader.read()
         if (done) break
         full += decoder.decode(value, { stream: true })
-        setMessages(prev => prev.map(m =>
-          m.id === assistantId ? { ...m, content: full } : m
-        ))
+        setMessages(prev =>
+          prev.map(m => m.id === assistantId ? { ...m, content: full } : m)
+        )
       }
 
       if (state !== 'open') setUnread(u => u + 1)
@@ -125,15 +188,35 @@ export default function ChatWidget() {
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
       const msg = err instanceof Error ? err.message : 'Something went wrong'
-      setMessages(prev => prev.map(m =>
-        m.id === assistantId
-          ? { ...m, content: `Sorry, something went wrong: ${msg}. You can also reach us on WhatsApp: +254 700 000 000.` }
-          : m
-      ))
+      setMessages(prev =>
+        prev.map(m =>
+          m.id === assistantId
+            ? { ...m, content: `Sorry, something went wrong. You can also reach us on WhatsApp: +254 725 723 131.\n\n_${msg}_` }
+            : m
+        )
+      )
     } finally {
       setLoading(false)
     }
-  }, [loading, messages, addMessage, state])
+  }, [state, startCountdown])
+
+  const send = useCallback(async (text: string) => {
+    const trimmed = text.trim()
+    if (!trimmed || loading || retryCountdown > 0) return
+
+    setInput('')
+    setLoading(true)
+    addMessage({ role: 'user', content: trimmed })
+
+    // Build API history — exclude static welcome message
+    const apiHistory = messages
+      .filter(m => m.id !== 'welcome' && m.content.trim() && !m.content.startsWith('⏳'))
+      .map(m => ({ role: m.role, content: m.content }))
+    apiHistory.push({ role: 'user', content: trimmed })
+
+    setLoading(false) // fireRequest will set it back to true
+    await fireRequest(trimmed, apiHistory)
+  }, [loading, retryCountdown, messages, addMessage, fireRequest])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) }
@@ -142,27 +225,31 @@ export default function ChatWidget() {
   const formatTime = (d: Date) =>
     d.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
 
+  // ─── Responsive panel sizing ────────────────────────────────────────────
+  // Mobile  (<640px)  : full-screen overlay (inset-0 with padding)
+  // Tablet  (sm–md)   : bottom-right anchored, 380px wide, 560px tall
+  // Desktop (lg+)     : bottom-right anchored, 420px wide, 600px tall
+  // XL+               : 440px wide, 640px tall
+  const panelClasses = cn(
+    // Base: full-screen on mobile
+    'fixed inset-0 z-[60] flex flex-col',
+    // sm: anchored bottom-right, fixed size — right-6 matches WhatsApp + trigger button
+    'sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[380px] sm:h-[560px]',
+    // lg: slightly larger
+    'lg:w-[420px] lg:h-[600px]',
+    // xl: maximum comfortable size
+    'xl:w-[440px] xl:h-[640px]',
+  )
+
   return (
     <>
-      {/* ── CHAT PANEL ── */}
+      {/* ── CHAT PANEL ────────────────────────────────────────────────────── */}
       {state === 'open' && (
-        <div className="fixed inset-x-4 bottom-4 top-4 z-[60] flex flex-col sm:inset-auto sm:bottom-28 sm:right-6 sm:w-96 sm:h-[560px] sm:top-auto">
+        <div className={panelClasses}>
+          <div className="flex flex-col flex-1 rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-slate-200 dark:border-slate-700 shadow-2xl bg-white dark:bg-slate-900 min-h-0">
 
-          {/* Close button — always visible, sits above panel on mobile */}
-          <div className="flex justify-end mb-2 sm:hidden">
-            <button
-              onClick={close}
-              className="w-10 h-10 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
-              aria-label="Close chat"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="flex flex-col flex-1 rounded-2xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-2xl bg-white dark:bg-slate-900 min-h-0">
-
-            {/* Header */}
-            <div className="flex items-center justify-between px-5 py-4 bg-blue-600 shrink-0">
+            {/* ── Header ── */}
+            <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 bg-blue-600 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center">
@@ -174,34 +261,44 @@ export default function ChatWidget() {
                   <p className="text-white font-bold text-sm leading-tight" style={{ fontFamily: 'Sora, sans-serif' }}>
                     Kali
                   </p>
-                  <p className="text-blue-100 text-[11px] leading-tight">Tuinuane AI · usually instant</p>
+                  <p className="text-blue-100 text-[11px] leading-tight">
+                    Tuinuane AI · usually instant
+                  </p>
                 </div>
               </div>
-              {/* Desktop close/minimise — inside header */}
-              <div className="hidden sm:flex items-center gap-1">
+
+              {/* Header actions */}
+              <div className="flex items-center gap-1">
+                {/* Collapse — visible on all sizes */}
                 <button
-                  onClick={() => setState('minimised')}
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-                  aria-label="Minimise"
+                  onClick={collapse}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/15 transition-colors"
+                  aria-label="Minimise chat"
+                  title="Minimise"
                 >
                   <ChevronDown className="w-4 h-4" />
                 </button>
+                {/* Close — visible on all sizes */}
                 <button
                   onClick={close}
-                  className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/10 transition-colors"
-                  aria-label="Close"
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/15 transition-colors"
+                  aria-label="Close chat"
+                  title="Close"
                 >
                   <X className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4 bg-slate-50 dark:bg-slate-900 min-h-0">
+            {/* ── Messages ── */}
+            <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 space-y-4 bg-slate-50 dark:bg-slate-900 min-h-0">
               {messages.map((msg) => (
                 <div
                   key={msg.id}
-                  className={cn('flex gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start')}
+                  className={cn(
+                    'flex gap-2',
+                    msg.role === 'user' ? 'justify-end' : 'justify-start'
+                  )}
                 >
                   {msg.role === 'assistant' && (
                     <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 mt-1">
@@ -227,16 +324,18 @@ export default function ChatWidget() {
                         )
                       )}
                     </div>
-                    <span className="text-[10px] text-slate-400 px-1">{formatTime(msg.timestamp)}</span>
+                    <span className="text-[10px] text-slate-400 px-1">
+                      {formatTime(msg.timestamp)}
+                    </span>
                   </div>
                 </div>
               ))}
               <div ref={bottomRef} />
             </div>
 
-            {/* Quick prompts — only on first load */}
+            {/* ── Quick prompts — only before any user message ── */}
             {messages.length <= 1 && (
-              <div className="px-4 pb-3 pt-2 flex flex-wrap gap-2 shrink-0 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
+              <div className="px-3 sm:px-4 pb-3 pt-2 flex flex-wrap gap-2 shrink-0 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
                 {QUICK_PROMPTS.map(prompt => (
                   <button
                     key={prompt}
@@ -250,30 +349,45 @@ export default function ChatWidget() {
               </div>
             )}
 
-            {/* Input */}
-            <div className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center gap-3 shrink-0 bg-white dark:bg-slate-900">
+            {/* ── Input bar ── */}
+            <div className="px-3 sm:px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center gap-2 shrink-0 bg-white dark:bg-slate-900">
               <input
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Type a message…"
-                disabled={loading}
+                placeholder={retryCountdown > 0 ? `Auto-retrying in ${retryCountdown}s…` : 'Type a message…'}
+                disabled={loading || retryCountdown > 0}
                 className="flex-1 text-sm bg-slate-100 dark:bg-slate-800 rounded-full px-4 py-2.5 border border-transparent outline-none focus:ring-2 focus:ring-blue-400/40 placeholder:text-slate-400 disabled:opacity-50 transition-all text-slate-800 dark:text-slate-100"
                 style={{ fontFamily: 'Manrope, sans-serif' }}
-                aria-label="Chat message input"
+                aria-label="Chat message"
               />
+
+              {/* ── Collapse button — sits beside send, always visible ── */}
+              <button
+                onClick={collapse}
+                className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 active:scale-90 transition-all"
+                aria-label="Minimise chat"
+                title="Minimise"
+              >
+                <ChevronDown className="w-4 h-4" />
+              </button>
+
+              {/* ── Send button ── */}
               <button
                 onClick={() => send(input)}
-                disabled={loading || !input.trim()}
+                disabled={loading || !input.trim() || retryCountdown > 0}
                 className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md"
-                aria-label="Send"
+                aria-label="Send message"
               >
-                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {loading
+                  ? <Loader2 className="w-4 h-4 animate-spin" />
+                  : <Send className="w-4 h-4" />
+                }
               </button>
             </div>
 
-            {/* Footer */}
+            {/* ── Footer ── */}
             <div className="text-center py-1.5 text-[10px] text-slate-400 bg-white dark:bg-slate-900 shrink-0 border-t border-slate-100 dark:border-slate-800">
               Powered by Tuinuane AI · Your data is private
             </div>
@@ -281,24 +395,39 @@ export default function ChatWidget() {
         </div>
       )}
 
-      {/* ── MINIMISED BAR ── */}
+      {/* ── MINIMISED BAR ──────────────────────────────────────────────────── */}
+      {/* Also sits above WhatsApp button */}
       {state === 'minimised' && (
-        <button
-          onClick={open}
-          className="fixed bottom-28 right-6 z-[60] flex items-center gap-3 px-4 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white shadow-xl active:scale-95 transition-all duration-200"
-          aria-label="Expand chat"
-        >
-          <Sparkles className="w-4 h-4" />
-          <span className="text-sm font-bold" style={{ fontFamily: 'Sora, sans-serif' }}>Chat with Kali</span>
-          {unread > 0 && (
-            <span className="w-5 h-5 rounded-full bg-white text-blue-600 text-[10px] font-black flex items-center justify-center">
-              {unread}
+        <div className="fixed bottom-24 right-6 z-[60] flex items-center gap-2 shadow-xl">
+          <button
+            onClick={open}
+            className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white active:scale-95 transition-all duration-200"
+            aria-label="Expand Kali chat"
+          >
+            <Sparkles className="w-4 h-4" />
+            <span className="text-sm font-bold" style={{ fontFamily: 'Sora, sans-serif' }}>
+              Chat with Kali
             </span>
-          )}
-        </button>
+            {unread > 0 && (
+              <span className="w-5 h-5 rounded-full bg-white text-blue-600 text-[10px] font-black flex items-center justify-center">
+                {unread}
+              </span>
+            )}
+          </button>
+          {/* Close from minimised state — no need to re-open first */}
+          <button
+            onClick={close}
+            className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 flex items-center justify-center active:scale-90 transition-all shadow"
+            aria-label="Close chat"
+            title="Close"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
       )}
 
-      {/* ── TRIGGER BUTTON ── */}
+      {/* ── TRIGGER BUTTON ─────────────────────────────────────────────────── */}
+      {/* Sits above the WhatsApp button (bottom-6 right-6) — bottom-24 clears it */}
       {state === 'closed' && (
         <button
           onClick={open}

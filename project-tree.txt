@@ -1,0 +1,110 @@
+tuinuane-app/
+├─ AGENTS.md
+├─ CLAUDE.md
+├─ components.json
+├─ eslint.config.mjs
+├─ middleware.ts
+├─ next-env.d.ts
+├─ next.config.ts
+├─ package.json
+├─ postcss.config.mjs
+├─ README.md
+├─ tsconfig.json
+├─ public/
+└─ src/
+   ├─ app/
+   │  ├─ globals.css
+   │  ├─ layout.tsx
+   │  ├─ page.tsx
+   │  ├─ not-found.tsx
+   │  ├─ portfolio/
+   │  │  └─ page.tsx
+   │  ├─ pricing/
+   │  │  └─ page.tsx
+   │  ├─ services/
+   │  │  └─ page.tsx
+   │  ├─ get-quote/
+   │  │  └─ page.tsx
+   │  ├─ contact/
+   │  │  └─ page.tsx
+   │  ├─ admin/
+   │  │  ├─ (auth)/
+   │  │  │  ├─ layout.tsx
+   │  │  │  └─ login/page.tsx
+   │  │  └─ (protected)/
+   │  │     ├─ layout.tsx
+   │  │     ├─ dashboard/page.tsx
+   │  │     ├─ chats/page.tsx
+   │  │     ├─ leads/page.tsx
+   │  │     ├─ proposals/page.tsx
+   │  │     └─ settings/page.tsx
+   │  └─ api/
+   │     ├─ chat/route.ts
+   │     ├─ leads/route.ts
+   │     ├─ leads/[id]/route.ts
+   │     ├─ quotes/route.ts
+   │     └─ quotes/[id]/route.ts
+   ├─ components/
+   │  ├─ NavLink.tsx
+   │  ├─ layout/
+   │  │  ├─ Providers.tsx
+   │  │  ├─ PageWrapper.tsx
+   │  │  ├─ Navbar.tsx
+   │  │  ├─ Footer.tsx
+   │  │  └─ ConditionalLayout.tsx
+   │  ├─ sections/
+   │  │  ├─ Hero.tsx
+   │  │  ├─ CallToAction.tsx
+   │  │  ├─ HowItWorks.tsx
+   │  │  ├─ MarketingServices.tsx
+   │  │  ├─ Portfolio.tsx
+   │  │  ├─ Pricing.tsx
+   │  │  ├─ Services.tsx
+   │  │  ├─ Testimonials.tsx
+   │  │  └─ TrustMarquee.tsx
+   │  ├─ common/
+   │  │  ├─ ChatWidget.tsx
+   │  │  ├─ ScrollReveal.tsx
+   │  │  ├─ SectionHeading.tsx
+   │  │  └─ WhatsAppButton.tsx
+   │  ├─ admin/
+   │  │  ├─ DashboardCharts.tsx
+   │  │  ├─ AdminSettingsForm.tsx
+   │  │  ├─ LeadsTable.tsx
+   │  │  └─ QuotesTable.tsx
+   │  └─ ui/
+   │     ├─ avatar.tsx
+   │     ├─ badge.tsx
+   │     ├─ button.tsx
+   │     ├─ input.tsx
+   │     ├─ select.tsx
+   │     ├─ sonner.tsx
+   │     ├─ textarea.tsx
+   │     ├─ toast.tsx
+   │     ├─ toaster.tsx
+   │     └─ tooltip.tsx
+   ├─ lib/
+   │  ├─ auth.ts
+   │  ├─ gemini.ts
+   │  ├─ supabase.ts
+   │  ├─ supabase-server.ts
+   │  └─ utils.ts
+   ├─ hooks/
+   │  ├─ use-mobile.tsx
+   │  └─ use-toast.ts
+   ├─ constants/
+   │  ├─ chatKnowledge.ts
+   │  ├─ routes.ts
+   │  └─ services.ts
+   ├─ assets/
+   │  ├─ logo.png
+   │  └─ hero-woman.png
+   └─ pages/
+      ├─ NotFound.tsx
+      └─ public/
+         ├─ Home.tsx
+         ├─ GetQuote.tsx
+         ├─ Portfolio.tsx
+         ├─ Pricing.tsx
+         ├─ Services.tsx
+         └─ Contact.tsx

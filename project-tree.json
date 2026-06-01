@@ -1,0 +1,124 @@
+{
+  "name": "tuinuane-app",
+  "children": [
+    { "type": "file", "name": "AGENTS.md" },
+    { "type": "file", "name": "CLAUDE.md" },
+    { "type": "file", "name": "components.json" },
+    { "type": "file", "name": "eslint.config.mjs" },
+    { "type": "file", "name": "middleware.ts" },
+    { "type": "file", "name": "next-env.d.ts" },
+    { "type": "file", "name": "next.config.ts" },
+    { "type": "file", "name": "package.json" },
+    { "type": "file", "name": "postcss.config.mjs" },
+    { "type": "file", "name": "README.md" },
+    { "type": "file", "name": "tsconfig.json" },
+    { "type": "directory", "name": "public", "children": [] },
+    {
+      "type": "directory",
+      "name": "src",
+      "children": [
+        {
+          "type": "directory",
+          "name": "app",
+          "children": [
+            { "type": "file", "name": "globals.css" },
+            { "type": "file", "name": "layout.tsx" },
+            { "type": "file", "name": "page.tsx" },
+            { "type": "file", "name": "not-found.tsx" },
+            {
+              "type": "directory",
+              "name": "portfolio",
+              "children": [ { "type": "file", "name": "page.tsx" } ]
+            },
+            {
+              "type": "directory",
+              "name": "pricing",
+              "children": [ { "type": "file", "name": "page.tsx" } ]
+            },
+            {
+              "type": "directory",
+              "name": "services",
+              "children": [ { "type": "file", "name": "page.tsx" } ]
+            },
+            { "type": "directory", "name": "get-quote", "children": [ { "type": "file", "name": "page.tsx" } ] },
+            { "type": "directory", "name": "contact", "children": [ { "type": "file", "name": "page.tsx" } ] },
+            {
+              "type": "directory",
+              "name": "admin",
+              "children": [
+                { "type": "directory", "name": "(auth)", "children": [ { "type": "file", "name": "layout.tsx" }, { "type": "file", "name": "login/page.tsx" } ] },
+                { "type": "directory", "name": "(protected)", "children": [ { "type": "file", "name": "layout.tsx" }, { "type": "file", "name": "dashboard/page.tsx" }, { "type": "file", "name": "chats/page.tsx" }, { "type": "file", "name": "leads/page.tsx" }, { "type": "file", "name": "proposals/page.tsx" }, { "type": "file", "name": "settings/page.tsx" } ] }
+              ]
+            },
+            {
+              "type": "directory",
+              "name": "api",
+              "children": [
+                { "type": "directory", "name": "chat", "children": [ { "type": "file", "name": "route.ts" } ] },
+                { "type": "directory", "name": "leads", "children": [ { "type": "file", "name": "route.ts" }, { "type": "file", "name": "[id]/route.ts" } ] },
+                { "type": "directory", "name": "quotes", "children": [ { "type": "file", "name": "route.ts" }, { "type": "file", "name": "[id]/route.ts" } ] }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "directory",
+          "name": "components",
+          "children": [
+            { "type": "file", "name": "NavLink.tsx" },
+            {
+              "type": "directory",
+              "name": "layout",
+              "children": [ { "type": "file", "name": "Providers.tsx" }, { "type": "file", "name": "PageWrapper.tsx" }, { "type": "file", "name": "Navbar.tsx" }, { "type": "file", "name": "Footer.tsx" }, { "type": "file", "name": "ConditionalLayout.tsx" } ]
+            },
+            {
+              "type": "directory",
+              "name": "sections",
+              "children": [ { "type": "file", "name": "Hero.tsx" }, { "type": "file", "name": "CallToAction.tsx" }, { "type": "file", "name": "HowItWorks.tsx" }, { "type": "file", "name": "MarketingServices.tsx" }, { "type": "file", "name": "Portfolio.tsx" }, { "type": "file", "name": "Pricing.tsx" }, { "type": "file", "name": "Services.tsx" }, { "type": "file", "name": "Testimonials.tsx" }, { "type": "file", "name": "TrustMarquee.tsx" } ]
+            },
+            {
+              "type": "directory",
+              "name": "common",
+              "children": [ { "type": "file", "name": "ChatWidget.tsx" }, { "type": "file", "name": "ScrollReveal.tsx" }, { "type": "file", "name": "SectionHeading.tsx" }, { "type": "file", "name": "WhatsAppButton.tsx" } ]
+            },
+            {
+              "type": "directory",
+              "name": "admin",
+              "children": [ { "type": "file", "name": "DashboardCharts.tsx" }, { "type": "file", "name": "AdminSettingsForm.tsx" }, { "type": "file", "name": "LeadsTable.tsx" }, { "type": "file", "name": "QuotesTable.tsx" } ]
+            },
+            {
+              "type": "directory",
+              "name": "ui",
+              "children": [ { "type": "file", "name": "avatar.tsx" }, { "type": "file", "name": "badge.tsx" }, { "type": "file", "name": "button.tsx" }, { "type": "file", "name": "input.tsx" }, { "type": "file", "name": "select.tsx" }, { "type": "file", "name": "sonner.tsx" }, { "type": "file", "name": "textarea.tsx" }, { "type": "file", "name": "toast.tsx" }, { "type": "file", "name": "toaster.tsx" }, { "type": "file", "name": "tooltip.tsx" } ]
+            }
+          ]
+        },
+        {
+          "type": "directory",
+          "name": "lib",
+          "children": [ { "type": "file", "name": "auth.ts" }, { "type": "file", "name": "gemini.ts" }, { "type": "file", "name": "supabase.ts" }, { "type": "file", "name": "supabase-server.ts" }, { "type": "file", "name": "utils.ts" } ]
+        },
+        {
+          "type": "directory",
+          "name": "hooks",
+          "children": [ { "type": "file", "name": "use-mobile.tsx" }, { "type": "file", "name": "use-toast.ts" } ]
+        },
+        {
+          "type": "directory",
+          "name": "constants",
+          "children": [ { "type": "file", "name": "chatKnowledge.ts" }, { "type": "file", "name": "routes.ts" }, { "type": "file", "name": "services.ts" } ]
+        },
+        {
+          "type": "directory",
+          "name": "assets",
+          "children": [ { "type": "file", "name": "logo.png" }, { "type": "file", "name": "hero-woman.png" } ]
+        },
+        {
+          "type": "directory",
+          "name": "pages",
+          "children": [ { "type": "file", "name": "NotFound.tsx" }, { "type": "directory", "name": "public", "children": [ { "type": "file", "name": "Home.tsx" }, { "type": "file", "name": "GetQuote.tsx" }, { "type": "file", "name": "Portfolio.tsx" }, { "type": "file", "name": "Pricing.tsx" }, { "type": "file", "name": "Services.tsx" }, { "type": "file", "name": "Contact.tsx" } ] } ]
+        }
+      ]
+    }
+  ]
+}
