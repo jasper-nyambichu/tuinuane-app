@@ -59,5 +59,41 @@ To get started with the Tuinuane App, follow these steps:
     Open [http://localhost:3000](http://localhost:3000 ) with your browser to see the result.
 
 ## Project Structure
+tuinuane-app/
+├── public/
+├── src/
+│   ├── app/
+│   │   ├── admin/
+│   │   ├── api/
+│   │   ├── contact/
+│   │   ├── get-quote/
+│   │   ├── portfolio/
+│   │   ├── pricing/
+│   │   ├── services/
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   ├── not-found.tsx
+│   │   └── page.tsx
+│   ├── components/
+│   ├── lib/
+│   └── types/
+├── .env.local.example
+├── next.config.ts
+├── package.json
+├── postcss.config.mjs
+├── tailwind.config.ts
+└── tsconfig.json
 
+
+## Contributing
+
+Contributions are welcome! Please feel free to open issues or submit pull requests.
+
+## License
+
+This project is licensed under the ISC License. See the `LICENSE` file for details. (Note: A `LICENSE` file was not found in the repository, please add one if applicable.)
+
+## Contact
+
+For any inquiries, please contact [jasper-nyambichu](https://github.com/jasper-nyambichu ).
 
