@@ -1,36 +1,99 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Tuinuane App
 
-## Getting Started
+## Overview
 
-First, run the development server:
+Tuinuane App is a modern web application built with Next.js, designed to provide a seamless user experience with robust backend services and AI capabilities. It leverages Supabase for database and authentication, and integrates with Google Generative AI for intelligent features.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Features
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+*   **User Authentication**: Secure user login and registration powered by Supabase.
+*   **AI Integration**: Utilizes Google Generative AI for enhanced functionalities.
+*   **Responsive Design**: Built with Radix UI and Tailwind CSS for a mobile-first and accessible interface.
+*   **API Endpoints**: Includes various API routes for different services.
+*   **Portfolio Management**: Dedicated section for managing user portfolios.
+*   **Pricing and Services**: Clear presentation of available services and pricing.
+*   **Contact Form**: Easy communication channel for users.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Technology Stack
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+*   **Framework**: Next.js 16.2.6
+*   **Styling**: Tailwind CSS, Radix UI
+*   **Backend/Database**: Supabase (SSR and JS client)
+*   **AI**: Google Generative AI (v0.24.1)
+*   **State Management/Data Fetching**: Tanstack React Query (v5.100.14)
+*   **UI Components**: Radix UI, Shadcn UI
+*   **Animation**: Framer Motion (v12.40.0)
+*   **Charting**: Recharts (v3.8.1)
+*   **Email Service**: Resend (v6.12.4)
 
-## Learn More
+## Installation and Setup
 
-To learn more about Next.js, take a look at the following resources:
+To get started with the Tuinuane App, follow these steps:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/jasper-nyambichu/tuinuane-app.git
+    cd tuinuane-app
+    ```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+2.  **Install dependencies**:
+    ```bash
+    npm install
+    # or yarn install
+    ```
 
-## Deploy on Vercel
+3.  **Set up environment variables**:
+    Create a `.env.local` file in the root directory and add your Supabase and Google Generative AI credentials:
+    ```env
+    NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+    GOOGLE_GENERATIVE_AI_API_KEY=your_google_generative_ai_api_key
+    ```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+4.  **Run the development server**:
+    ```bash
+    npm run dev
+    # or yarn dev
+    ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+    Open [http://localhost:3000](http://localhost:3000 ) with your browser to see the result.
+
+## Project Structure
+tuinuane-app/
+├── public/
+├── src/
+│   ├── app/
+│   │   ├── admin/
+│   │   ├── api/
+│   │   ├── contact/
+│   │   ├── get-quote/
+│   │   ├── portfolio/
+│   │   ├── pricing/
+│   │   ├── services/
+│   │   ├── globals.css
+│   │   ├── layout.tsx
+│   │   ├── not-found.tsx
+│   │   └── page.tsx
+│   ├── components/
+│   ├── lib/
+│   └── types/
+├── .env.local.example
+├── next.config.ts
+├── package.json
+├── postcss.config.mjs
+├── tailwind.config.ts
+└── tsconfig.json
+
+
+## Contributing
+
+Contributions are welcome! Please feel free to open issues or submit pull requests.
+
+## License
+
+This project is licensed under the ISC License. See the `LICENSE` file for details. (Note: A `LICENSE` file was not found in the repository, please add one if applicable.)
+
+## Contact
+
+For any inquiries, please contact [jasper-nyambichu](https://github.com/jasper-nyambichu ).
+
