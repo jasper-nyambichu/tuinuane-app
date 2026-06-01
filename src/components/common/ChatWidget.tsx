@@ -2,25 +2,32 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import {
-  MessageCircle, X, Send, Loader2, Sparkles, ChevronDown,
-} from 'lucide-react'
+import { MessageCircle, X, Send, Loader2, Sparkles, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type Message = {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
+// ─── Types ────────────────────────────────────────────────────────────────────
+type MessageRole = 'user' | 'assistant'
+type ChatState   = 'closed' | 'open' | 'minimised'
+
+interface Message {
+  id:        string
+  role:      MessageRole
+  content:   string
   timestamp: Date
+  isError?:  boolean
+  isQueued?: boolean   // shows a queued indicator instead of typing
 }
 
-type ChatState = 'closed' | 'open' | 'minimised'
+interface ApiMessage {
+  role:    MessageRole
+  content: string
+}
 
-// Welcome message is UI-only — NEVER sent to the API as history
+// ─── Constants ────────────────────────────────────────────────────────────────
 const WELCOME_MESSAGE: Message = {
-  id: 'welcome',
-  role: 'assistant',
-  content: "Hi! I'm Kali 👋 I'm Tuinuane Digitals' AI assistant. I can help you with our products, pricing, and getting a free proposal. What brings you here today?",
+  id:        'welcome',
+  role:      'assistant',
+  content:   "Hi! I'm Kali 👋 I'm Tuinuane Digitals' AI assistant. I can help you with our products, pricing, and getting a free proposal. What brings you here today?",
   timestamp: new Date(),
 }
 
@@ -31,68 +38,113 @@ const QUICK_PROMPTS = [
   'Get me a free proposal',
 ]
 
-export default function ChatWidget() {
-  const [state, setState]       = useState<ChatState>('closed')
-  const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE])
-  const [input, setInput]       = useState('')
-  const [loading, setLoading]   = useState(false)
-  const [unread, setUnread]     = useState(0)
-  const [hasOpened, setHasOpened] = useState(false)
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const inputRef  = useRef<HTMLInputElement>(null)
-  const abortRef  = useRef<AbortController | null>(null)
+// How long to wait before retrying after a 429.
+// Server sends the exact value; this is the client-side fallback.
+const DEFAULT_RETRY_WAIT_MS = 15_000
 
-  // Auto-scroll to latest message
+// Maximum number of automatic retries per message before giving up
+const MAX_AUTO_RETRIES = 1
+
+// ─── Component ────────────────────────────────────────────────────────────────
+export default function ChatWidget() {
+  const [chatState, setChatState] = useState<ChatState>('closed')
+  const [messages,  setMessages]  = useState<Message[]>([WELCOME_MESSAGE])
+  const [input,     setInput]     = useState('')
+  const [loading,   setLoading]   = useState(false)
+  const [unread,    setUnread]    = useState(0)
+  const [hasOpened, setHasOpened] = useState(false)
+
+  // Rate-limit state — shown in the UI, does NOT drive auto-retry logic
+  const [rateLimited,   setRateLimited]   = useState(false)
+  const [cooldownSecs,  setCooldownSecs]  = useState(0)
+
+  const bottomRef      = useRef<HTMLDivElement>(null)
+  const inputRef       = useRef<HTMLInputElement>(null)
+  const abortRef       = useRef<AbortController | null>(null)
+  // Timer ref for the visual countdown — cleared on unmount / close
+  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Tracks retries per assistant message id to prevent infinite loops
+  const retryCountRef  = useRef<Record<string, number>>({})
+
+  // ── Cleanup on unmount ───────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort()
+      if (countdownTimer.current) clearInterval(countdownTimer.current)
+    }
+  }, [])
+
+  // ── Auto-scroll ──────────────────────────────────────────────────────────
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Focus input when opened
+  // ── Focus on open ────────────────────────────────────────────────────────
   useEffect(() => {
-    if (state === 'open') {
+    if (chatState === 'open') {
       setTimeout(() => inputRef.current?.focus(), 120)
       setUnread(0)
     }
-  }, [state])
+  }, [chatState])
 
-  // Show unread badge after 45s if never opened
+  // ── Attention badge after 45s ────────────────────────────────────────────
   useEffect(() => {
     if (hasOpened) return
     const t = setTimeout(() => setUnread(1), 45_000)
     return () => clearTimeout(t)
   }, [hasOpened])
 
-  const open = () => {
-    setState('open')
-    setHasOpened(true)
-    setUnread(0)
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const open     = () => { setChatState('open');      setHasOpened(true); setUnread(0) }
+  const close    = () => { setChatState('closed');    abortRef.current?.abort(); stopCooldown() }
+  const collapse = () => { setChatState('minimised'); }
+
+  const stopCooldown = () => {
+    if (countdownTimer.current) clearInterval(countdownTimer.current)
+    setRateLimited(false)
+    setCooldownSecs(0)
   }
 
-  const close = () => {
-    setState('closed')
-    abortRef.current?.abort()
+  const mkId = (role: MessageRole) => `${role}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`
+
+  const updateMessage = (id: string, patch: Partial<Message>) =>
+    setMessages(prev => prev.map(m => m.id === id ? { ...m, ...patch } : m))
+
+  // Build history safe to send to the API:
+  // - exclude the static welcome message
+  // - exclude error/queued placeholder messages
+  // - exclude empty content
+  const buildApiHistory = (currentMessages: Message[], extraUserText?: string): ApiMessage[] => {
+    const history: ApiMessage[] = currentMessages
+      .filter(m =>
+        m.id !== 'welcome' &&
+        !m.isError &&
+        !m.isQueued &&
+        m.content.trim().length > 0
+      )
+      .map(m => ({ role: m.role, content: m.content }))
+
+    if (extraUserText) {
+      history.push({ role: 'user', content: extraUserText })
+    }
+    return history
   }
 
-  const collapse = () => setState('minimised')
+  // ── Start visual cooldown countdown ─────────────────────────────────────
+  // This is purely UI feedback. It does NOT trigger auto-retry.
+  // After the countdown the user can manually send again — no invisible retries.
+  const startCooldown = useCallback((waitMs: number) => {
+    if (countdownTimer.current) clearInterval(countdownTimer.current)
 
-  const addMessage = useCallback((msg: Omit<Message, 'id' | 'timestamp'>) => {
-    const full: Message = { ...msg, id: `${msg.role}-${Date.now()}`, timestamp: new Date() }
-    setMessages(prev => [...prev, full])
-    return full.id
-  }, [])
+    const waitSecs = Math.ceil(waitMs / 1000)
+    setCooldownSecs(waitSecs)
+    setRateLimited(true)
 
-  // ── Rate-limit countdown state ───────────────────────────────────────────
-  const [retryCountdown, setRetryCountdown] = useState<number>(0)
-  const retryTimerRef   = useRef<ReturnType<typeof setInterval> | null>(null)
-  const pendingRetryRef = useRef<{ text: string; apiHistory: { role: string; content: string }[] } | null>(null)
-
-  const startCountdown = useCallback((seconds: number, text: string, apiHistory: { role: string; content: string }[]) => {
-    pendingRetryRef.current = { text, apiHistory }
-    setRetryCountdown(seconds)
-    retryTimerRef.current = setInterval(() => {
-      setRetryCountdown(prev => {
+    countdownTimer.current = setInterval(() => {
+      setCooldownSecs(prev => {
         if (prev <= 1) {
-          clearInterval(retryTimerRef.current!)
+          clearInterval(countdownTimer.current!)
+          setRateLimited(false)
           return 0
         }
         return prev - 1
@@ -100,43 +152,17 @@ export default function ChatWidget() {
     }, 1000)
   }, [])
 
-  // Auto-fire the retry when countdown reaches 0 and there's a pending message
-  useEffect(() => {
-    if (retryCountdown === 0 && pendingRetryRef.current) {
-      const { text, apiHistory } = pendingRetryRef.current
-      pendingRetryRef.current = null
-      fireRequest(text, apiHistory)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [retryCountdown])
-
-  // Core fetch — separated so it can be called both fresh and on retry
+  // ── Core request function ────────────────────────────────────────────────
+  // assistantId: the message bubble to stream into (already added before calling)
+  // apiHistory:  full history including the new user message
+  // retryKey:    unique key to track retry attempts (same as assistantId on first try)
   const fireRequest = useCallback(async (
-    trimmed: string,
-    apiHistory: { role: string; content: string }[],
-    isRetry = false
+    assistantId: string,
+    apiHistory:  ApiMessage[],
+    retryKey:    string,
   ) => {
-    const assistantId = isRetry
-      ? `assistant-retry-${Date.now()}`
-      : `assistant-${Date.now()}`
-
-    if (!isRetry) {
-      setMessages(prev => [
-        ...prev,
-        { id: assistantId, role: 'assistant' as const, content: '', timestamp: new Date() },
-      ])
-    } else {
-      // On retry, update the placeholder that was left with the countdown message
-      setMessages(prev =>
-        prev.map(m =>
-          m.role === 'assistant' && m.content.startsWith('⏳')
-            ? { ...m, id: assistantId, content: '' }
-            : m
-        )
-      )
-    }
-
     setLoading(true)
+    updateMessage(assistantId, { content: '', isQueued: false })
 
     try {
       abortRef.current = new AbortController()
@@ -148,75 +174,116 @@ export default function ChatWidget() {
         signal:  abortRef.current.signal,
       })
 
-      // ── Handle 429 rate limit ──────────────────────────────────────────
+      // ── 429: Rate limited ──────────────────────────────────────────────
       if (res.status === 429) {
-        const body = await res.json().catch(() => ({}))
-        const wait = (body.retryAfter as number) ?? 15
+        const body    = await res.json().catch(() => ({}))
+        const waitMs  = ((body.retryAfter as number) ?? 15) * 1000
+        const attempt = (retryCountRef.current[retryKey] ?? 0) + 1
 
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === assistantId
-              ? { ...m, content: `⏳ I'm handling a few chats right now. Auto-retrying in ${wait}s…` }
-              : m
-          )
-        )
+        // Only auto-retry once — after that the user must manually resend
+        if (attempt <= MAX_AUTO_RETRIES) {
+          retryCountRef.current[retryKey] = attempt
+
+          // Show a one-time queued indicator in the message bubble
+          updateMessage(assistantId, {
+            content:  '',
+            isQueued: true,
+          })
+          setLoading(false)
+          startCooldown(waitMs)
+
+          // Schedule a single silent retry after the cooldown window
+          const retryTimeout = setTimeout(() => {
+            setRateLimited(false)
+            setCooldownSecs(0)
+            fireRequest(assistantId, apiHistory, retryKey)
+          }, waitMs)
+
+          // Store cleanup ref on abort
+          abortRef.current.signal.addEventListener('abort', () => clearTimeout(retryTimeout))
+          return
+        }
+
+        // Max retries reached — show a human message and let user decide
+        updateMessage(assistantId, {
+          content:  "I'm still quite busy right now. Please wait a moment and hit send again, or reach us directly on WhatsApp: +254 725 723 131.",
+          isError:  true,
+          isQueued: false,
+        })
         setLoading(false)
-        startCountdown(wait, trimmed, apiHistory)
+        startCooldown(waitMs)
         return
       }
 
+      // ── Other HTTP errors ──────────────────────────────────────────────
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        throw new Error(err.error || `Error ${res.status}`)
+        const body = await res.json().catch(() => ({}))
+        throw new Error(body.error || `Request failed (${res.status})`)
       }
 
+      // ── Stream the response ────────────────────────────────────────────
       const reader  = res.body!.getReader()
       const decoder = new TextDecoder()
-      let full = ''
+      let   full    = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         full += decoder.decode(value, { stream: true })
-        setMessages(prev =>
-          prev.map(m => m.id === assistantId ? { ...m, content: full } : m)
-        )
+        updateMessage(assistantId, { content: full, isQueued: false })
       }
 
-      if (state !== 'open') setUnread(u => u + 1)
+      // Clean up retry tracking for this message
+      delete retryCountRef.current[retryKey]
+
+      if (chatState !== 'open') setUnread(u => u + 1)
 
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
-      const msg = err instanceof Error ? err.message : 'Something went wrong'
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantId
-            ? { ...m, content: `Sorry, something went wrong. You can also reach us on WhatsApp: +254 725 723 131.\n\n_${msg}_` }
-            : m
-        )
-      )
+
+      updateMessage(assistantId, {
+        content: "Something went wrong on my end. Please try again or reach us on WhatsApp: +254 725 723 131.",
+        isError: true,
+      })
     } finally {
       setLoading(false)
     }
-  }, [state, startCountdown])
+  }, [chatState, startCooldown])
 
+  // ── Public send ──────────────────────────────────────────────────────────
   const send = useCallback(async (text: string) => {
     const trimmed = text.trim()
-    if (!trimmed || loading || retryCountdown > 0) return
+
+    // Guard: no empty messages, no sending while loading or in cooldown
+    if (!trimmed || loading || rateLimited) return
 
     setInput('')
-    setLoading(true)
-    addMessage({ role: 'user', content: trimmed })
 
-    // Build API history — exclude static welcome message
-    const apiHistory = messages
-      .filter(m => m.id !== 'welcome' && m.content.trim() && !m.content.startsWith('⏳'))
-      .map(m => ({ role: m.role, content: m.content }))
-    apiHistory.push({ role: 'user', content: trimmed })
+    // Add the user message to the UI immediately
+    const userMsg: Message = {
+      id:        mkId('user'),
+      role:      'user',
+      content:   trimmed,
+      timestamp: new Date(),
+    }
+    setMessages(prev => [...prev, userMsg])
 
-    setLoading(false) // fireRequest will set it back to true
-    await fireRequest(trimmed, apiHistory)
-  }, [loading, retryCountdown, messages, addMessage, fireRequest])
+    // Add an empty assistant placeholder for streaming
+    const assistantId = mkId('assistant')
+    setMessages(prev => [
+      ...prev,
+      { id: assistantId, role: 'assistant', content: '', timestamp: new Date() },
+    ])
+
+    // Build history from current state + new user message
+    // Use a functional snapshot via the setter to avoid stale closure
+    setMessages(prev => {
+      const apiHistory = buildApiHistory(prev.filter(m => m.id !== assistantId), trimmed)
+      // Fire async — don't await inside the setState callback
+      setTimeout(() => fireRequest(assistantId, apiHistory, assistantId), 0)
+      return prev
+    })
+  }, [loading, rateLimited, fireRequest])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(input) }
@@ -225,30 +292,30 @@ export default function ChatWidget() {
   const formatTime = (d: Date) =>
     d.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
 
-  // ─── Responsive panel sizing ────────────────────────────────────────────
-  // Mobile  (<640px)  : full-screen overlay (inset-0 with padding)
-  // Tablet  (sm–md)   : bottom-right anchored, 380px wide, 560px tall
-  // Desktop (lg+)     : bottom-right anchored, 420px wide, 600px tall
-  // XL+               : 440px wide, 640px tall
+  // ── Input state ──────────────────────────────────────────────────────────
+  const inputDisabled   = loading || rateLimited
+  const inputPlaceholder = rateLimited
+    ? `Ready again in ${cooldownSecs}s…`
+    : loading
+      ? 'Kali is typing…'
+      : 'Type a message…'
+
+  // ── Panel sizing ─────────────────────────────────────────────────────────
   const panelClasses = cn(
-    // Base: full-screen on mobile
     'fixed inset-0 z-[60] flex flex-col',
-    // sm: anchored bottom-right, fixed size — right-6 matches WhatsApp + trigger button
     'sm:inset-auto sm:bottom-24 sm:right-6 sm:w-[380px] sm:h-[560px]',
-    // lg: slightly larger
     'lg:w-[420px] lg:h-[600px]',
-    // xl: maximum comfortable size
     'xl:w-[440px] xl:h-[640px]',
   )
 
   return (
     <>
-      {/* ── CHAT PANEL ────────────────────────────────────────────────────── */}
-      {state === 'open' && (
+      {/* ── CHAT PANEL ──────────────────────────────────────────────────── */}
+      {chatState === 'open' && (
         <div className={panelClasses}>
           <div className="flex flex-col flex-1 rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-slate-200 dark:border-slate-700 shadow-2xl bg-white dark:bg-slate-900 min-h-0">
 
-            {/* ── Header ── */}
+            {/* Header */}
             <div className="flex items-center justify-between px-4 sm:px-5 py-3 sm:py-4 bg-blue-600 shrink-0">
               <div className="flex items-center gap-3">
                 <div className="relative">
@@ -262,14 +329,14 @@ export default function ChatWidget() {
                     Kali
                   </p>
                   <p className="text-blue-100 text-[11px] leading-tight">
-                    Tuinuane AI · usually instant
+                    {rateLimited
+                      ? `Ready in ${cooldownSecs}s…`
+                      : 'Tuinuane AI · usually instant'
+                    }
                   </p>
                 </div>
               </div>
-
-              {/* Header actions */}
               <div className="flex items-center gap-1">
-                {/* Collapse — visible on all sizes */}
                 <button
                   onClick={collapse}
                   className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/15 transition-colors"
@@ -278,7 +345,6 @@ export default function ChatWidget() {
                 >
                   <ChevronDown className="w-4 h-4" />
                 </button>
-                {/* Close — visible on all sizes */}
                 <button
                   onClick={close}
                   className="w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:text-white hover:bg-white/15 transition-colors"
@@ -290,15 +356,12 @@ export default function ChatWidget() {
               </div>
             </div>
 
-            {/* ── Messages ── */}
+            {/* Messages */}
             <div className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 space-y-4 bg-slate-50 dark:bg-slate-900 min-h-0">
-              {messages.map((msg) => (
+              {messages.map(msg => (
                 <div
                   key={msg.id}
-                  className={cn(
-                    'flex gap-2',
-                    msg.role === 'user' ? 'justify-end' : 'justify-start'
-                  )}
+                  className={cn('flex gap-2', msg.role === 'user' ? 'justify-end' : 'justify-start')}
                 >
                   {msg.role === 'assistant' && (
                     <div className="w-7 h-7 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center shrink-0 mt-1">
@@ -311,29 +374,52 @@ export default function ChatWidget() {
                         'px-4 py-2.5 rounded-2xl text-sm leading-relaxed',
                         msg.role === 'user'
                           ? 'bg-blue-600 text-white rounded-br-sm font-medium'
-                          : 'bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 rounded-bl-sm border border-slate-200 dark:border-slate-700'
+                          : cn(
+                              'bg-white dark:bg-slate-800 rounded-bl-sm border',
+                              msg.isError
+                                ? 'text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800'
+                                : 'text-slate-800 dark:text-slate-100 border-slate-200 dark:border-slate-700'
+                            )
                       )}
                       style={{ fontFamily: 'Manrope, sans-serif' }}
                     >
-                      {msg.content || (
-                        msg.role === 'assistant' && (
-                          <span className="flex items-center gap-2 text-slate-400">
-                            <Loader2 className="w-3 h-3 animate-spin" />
-                            <span className="text-xs">Kali is typing…</span>
+                      {/* Typing indicator */}
+                      {msg.role === 'assistant' && !msg.content && !msg.isQueued && (
+                        <span className="flex items-center gap-2 text-slate-400">
+                          <Loader2 className="w-3 h-3 animate-spin" />
+                          <span className="text-xs">Kali is typing…</span>
+                        </span>
+                      )}
+                      {/* Queued indicator — shown during rate-limit wait */}
+                      {msg.isQueued && (
+                        <span className="flex items-center gap-2 text-slate-400">
+                          <span className="flex gap-0.5">
+                            {[0, 1, 2].map(i => (
+                              <span
+                                key={i}
+                                className="w-1.5 h-1.5 rounded-full bg-slate-400 animate-bounce"
+                                style={{ animationDelay: `${i * 150}ms` }}
+                              />
+                            ))}
                           </span>
-                        )
+                          <span className="text-xs text-slate-400">
+                            Queued — retrying in {cooldownSecs}s
+                          </span>
+                        </span>
+                      )}
+                      {/* Actual content */}
+                      {msg.content && (
+                        <span className="whitespace-pre-wrap">{msg.content}</span>
                       )}
                     </div>
-                    <span className="text-[10px] text-slate-400 px-1">
-                      {formatTime(msg.timestamp)}
-                    </span>
+                    <span className="text-[10px] text-slate-400 px-1">{formatTime(msg.timestamp)}</span>
                   </div>
                 </div>
               ))}
               <div ref={bottomRef} />
             </div>
 
-            {/* ── Quick prompts — only before any user message ── */}
+            {/* Quick prompts — only before first user message */}
             {messages.length <= 1 && (
               <div className="px-3 sm:px-4 pb-3 pt-2 flex flex-wrap gap-2 shrink-0 bg-slate-50 dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800">
                 {QUICK_PROMPTS.map(prompt => (
@@ -349,21 +435,29 @@ export default function ChatWidget() {
               </div>
             )}
 
-            {/* ── Input bar ── */}
+            {/* Input bar */}
             <div className="px-3 sm:px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex items-center gap-2 shrink-0 bg-white dark:bg-slate-900">
               <input
                 ref={inputRef}
                 value={input}
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder={retryCountdown > 0 ? `Auto-retrying in ${retryCountdown}s…` : 'Type a message…'}
-                disabled={loading || retryCountdown > 0}
-                className="flex-1 text-sm bg-slate-100 dark:bg-slate-800 rounded-full px-4 py-2.5 border border-transparent outline-none focus:ring-2 focus:ring-blue-400/40 placeholder:text-slate-400 disabled:opacity-50 transition-all text-slate-800 dark:text-slate-100"
+                placeholder={inputPlaceholder}
+                disabled={inputDisabled}
+                className={cn(
+                  'flex-1 text-sm rounded-full px-4 py-2.5 border border-transparent outline-none',
+                  'focus:ring-2 focus:ring-blue-400/40 placeholder:text-slate-400 transition-all',
+                  'text-slate-800 dark:text-slate-100',
+                  rateLimited
+                    ? 'bg-amber-50 dark:bg-amber-950/30 opacity-75'
+                    : 'bg-slate-100 dark:bg-slate-800',
+                  inputDisabled && 'cursor-not-allowed'
+                )}
                 style={{ fontFamily: 'Manrope, sans-serif' }}
                 aria-label="Chat message"
               />
 
-              {/* ── Collapse button — sits beside send, always visible ── */}
+              {/* Collapse */}
               <button
                 onClick={collapse}
                 className="w-9 h-9 rounded-full shrink-0 flex items-center justify-center bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 active:scale-90 transition-all"
@@ -373,12 +467,12 @@ export default function ChatWidget() {
                 <ChevronDown className="w-4 h-4" />
               </button>
 
-              {/* ── Send button ── */}
+              {/* Send */}
               <button
                 onClick={() => send(input)}
-                disabled={loading || !input.trim() || retryCountdown > 0}
+                disabled={inputDisabled || !input.trim()}
                 className="w-10 h-10 rounded-full shrink-0 flex items-center justify-center bg-blue-600 hover:bg-blue-700 text-white active:scale-90 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-md"
-                aria-label="Send message"
+                aria-label="Send"
               >
                 {loading
                   ? <Loader2 className="w-4 h-4 animate-spin" />
@@ -387,7 +481,7 @@ export default function ChatWidget() {
               </button>
             </div>
 
-            {/* ── Footer ── */}
+            {/* Footer */}
             <div className="text-center py-1.5 text-[10px] text-slate-400 bg-white dark:bg-slate-900 shrink-0 border-t border-slate-100 dark:border-slate-800">
               Powered by Tuinuane AI · Your data is private
             </div>
@@ -395,9 +489,8 @@ export default function ChatWidget() {
         </div>
       )}
 
-      {/* ── MINIMISED BAR ──────────────────────────────────────────────────── */}
-      {/* Also sits above WhatsApp button */}
-      {state === 'minimised' && (
+      {/* ── MINIMISED BAR ───────────────────────────────────────────────── */}
+      {chatState === 'minimised' && (
         <div className="fixed bottom-24 right-6 z-[60] flex items-center gap-2 shadow-xl">
           <button
             onClick={open}
@@ -414,7 +507,6 @@ export default function ChatWidget() {
               </span>
             )}
           </button>
-          {/* Close from minimised state — no need to re-open first */}
           <button
             onClick={close}
             className="w-9 h-9 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-600 dark:text-slate-300 flex items-center justify-center active:scale-90 transition-all shadow"
@@ -426,9 +518,8 @@ export default function ChatWidget() {
         </div>
       )}
 
-      {/* ── TRIGGER BUTTON ─────────────────────────────────────────────────── */}
-      {/* Sits above the WhatsApp button (bottom-6 right-6) — bottom-24 clears it */}
-      {state === 'closed' && (
+      {/* ── TRIGGER BUTTON ──────────────────────────────────────────────── */}
+      {chatState === 'closed' && (
         <button
           onClick={open}
           className="fixed bottom-24 right-6 z-[60] w-14 h-14 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all duration-200"

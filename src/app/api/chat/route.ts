@@ -29,12 +29,6 @@ const SAVE_LEAD_TOOL: Tool = {
 type ChatMessage   = { role: 'user' | 'assistant'; content: string }
 type GeminiMessage = { role: 'user' | 'model'; parts: { text: string }[] }
 
-// ─── In-process concurrency guard ────────────────────────────────────────────
-// On the free tier (15 RPM) we must never fire parallel Gemini calls.
-// This simple flag serialises requests at the process level.
-// For multi-instance deployments, replace with a Redis lock or Supabase queue.
-let geminiInFlight = false
-
 // ─── Error classifiers ────────────────────────────────────────────────────────
 function isRateLimitError(err: unknown): boolean {
   if (err instanceof Error) {
@@ -69,9 +63,9 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
-// ─── Single-retry helper (transient errors only) ──────────────────────────────
-// We do NOT retry 429s here — we return 429 to the client and let it wait.
-// Retrying 429s server-side burns quota faster (each retry = another request).
+// Single retry only for transient network/infrastructure errors.
+// 429s are NOT retried server-side — they go straight back to the client.
+// Retrying a 429 server-side consumes another quota slot immediately.
 async function withTransientRetry<T>(fn: () => Promise<T>): Promise<T> {
   try {
     return await fn()
@@ -86,17 +80,6 @@ async function withTransientRetry<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export async function POST(req: NextRequest) {
-  // ── Concurrency guard: reject if another Gemini call is already in-flight ──
-  if (geminiInFlight) {
-    console.warn('[chat] Request rejected — Gemini call already in-flight')
-    return NextResponse.json(
-      { error: 'RATE_LIMITED', retryAfter: 5 },
-      { status: 429 }
-    )
-  }
-
-  geminiInFlight = true
-
   try {
     const { messages }: { messages: ChatMessage[] } = await req.json()
 
@@ -111,7 +94,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Last message must be from user' }, { status: 400 })
     }
 
-    // Build history — Gemini requires it to start with a 'user' turn
+    // Build Gemini history — must start with a 'user' turn
     const historyMessages = realMessages.slice(0, -1)
     const firstUserIdx    = historyMessages.findIndex(m => m.role === 'user')
     const trimmedHistory  = firstUserIdx === -1 ? [] : historyMessages.slice(firstUserIdx)
@@ -121,7 +104,7 @@ export async function POST(req: NextRequest) {
       parts: [{ text: m.content }],
     }))
 
-    // ── Call Gemini (single transient retry, NO 429 retry) ─────────────────
+    // ── Call Gemini ────────────────────────────────────────────────────────
     let response: GenerateContentResponse
 
     try {
@@ -133,8 +116,7 @@ export async function POST(req: NextRequest) {
       response = result.response
     } catch (err: unknown) {
       if (isRateLimitError(err)) {
-        // Tell the client to wait 15s before retrying (free tier window)
-        console.warn('[chat] Gemini rate limit hit — sending 429 to client')
+        console.warn('[chat] Gemini quota hit — returning 429 to client')
         return NextResponse.json(
           { error: 'RATE_LIMITED', retryAfter: 15 },
           { status: 429 }
@@ -169,7 +151,6 @@ export async function POST(req: NextRequest) {
         console.error('[chat] Lead save exception:', err)
       }
 
-      // Send tool result back — also with transient retry only
       let toolResponseText: string
       try {
         const toolResult = await withTransientRetry(async () => {
@@ -202,10 +183,10 @@ export async function POST(req: NextRequest) {
         throw err
       }
 
-      return streamText(toolResponseText)
+        return streamText(toolResponseText)
     }
 
-    return streamText(response.candidates?.[0]?.content?.parts?.map(p => 'text' in p ? p.text : '').join('') || '')
+      return streamText(responseToText(response))
 
   } catch (error) {
     console.error('[chat] Unhandled error:', error)
@@ -213,13 +194,10 @@ export async function POST(req: NextRequest) {
       { error: 'Something went wrong. Please try again or reach us on WhatsApp: +254 700 000 000.' },
       { status: 500 }
     )
-  } finally {
-    // Always release the lock — even if an error is thrown
-    geminiInFlight = false
   }
 }
 
-// ─── Streaming helper ──────────────────────────────────────────────────────────
+// ─── Word-by-word streaming helper ───────────────────────────────────────────
 function streamText(text: string): Response {
   const encoder = new TextEncoder()
   const stream  = new ReadableStream({
@@ -244,4 +222,9 @@ function streamText(text: string): Response {
       'X-Accel-Buffering': 'no',
     },
   })
+}
+
+function responseToText(resp: GenerateContentResponse): string {
+  const parts = resp.candidates?.[0]?.content?.parts ?? []
+  return parts.map((p: any) => p.text ?? '').join('')
 }
