@@ -1,13 +1,15 @@
+// src/components/layout/ConditionalLayout.tsx
 'use client'
 
 import { usePathname } from 'next/navigation'
 import Navbar from './Navbar'
 import Footer from './Footer'
 import WhatsAppButton from '../common/WhatsAppButton'
+import ChatWidget from '../common/ChatWidget'
 
 export default function ConditionalLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const isAdmin = pathname?.startsWith('/admin') ?? false;
+  const isAdmin = pathname?.startsWith('/admin') ?? false
 
   if (isAdmin) {
     return <>{children}</>
@@ -21,6 +23,7 @@ export default function ConditionalLayout({ children }: { children: React.ReactN
       </main>
       <Footer />
       <WhatsAppButton />
+      <ChatWidget />
     </>
   )
 }
